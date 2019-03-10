@@ -35,30 +35,31 @@ const obstacleNumLim = 30;
 var player;
 var lane = [];
 var wall = [];
-var coinCluster = [[], [], []];
-var enemy1 = [];
+var coinCluster = [];
 var enemy2 = [];
 var barricade = [];
 var holeBarricade = [];
 var boot = [];
 var jet = [];
-
-// Boost descriptors
-const boostTimeLimit = 600;
-const boostGenNum = 3000;
-const boostNumLim = 3;
-var boostGenFlag = 45;
-var bootDraw = [];
-var jetDraw = [];
-var bootTime = 0;
+var police;
 
 // Coin descriptors
 const coinDim = [0.5, 0.5, 0.5];
 const coinNum = 7;
+var coinDraw = [];
+var coinGenNum = 300;
+var coinGenFlag = 11;
+var coinNumLim = 200;
 
-// Enemy1 descriptors
-const enemy1Dim = [laneWidth, laneWidth, laneWidth];
-var enemy1GenFlag = 94;
+// Enemy2 descriptors
+const enemy2Dim = [laneWidth / 8, 2, laneWidth / 8];
+var enemy2GenFlag = 65;
+
+// Police Descriptors
+const policeDim = [1, 2, 1];
+var policeFlag = 0;
+var policeDraw = true;
+const policeLim = 600;
 
 // Barricade descriptors
 var barricadeFlag = 78;
@@ -66,7 +67,7 @@ var holeBarricadeFlag = 67;
 
 // Player descriptors
 const playerDim = [1, 2, 1];
-const playerPos = [centreX, groundY + playerDim[1]/2, -10.0];
+const playerPos = [centreX, groundY + playerDim[1] / 2, -10.0];
 var movingRight = false;
 var movingLeft = false;
 var speedX = 0.25;
@@ -76,6 +77,19 @@ var playerScore = 0;
 var isDucking = false;
 var jumpHeight = 2;
 var isJumping = false;
+var isSlowed = -1;
+
+// Boost descriptors
+const boostTimeLimit = 600;
+const boostGenNum = 3000;
+const boostNumLim = 3;
+var boostGenFlag = 45;
+var bootDraw = [];
+var jetDraw = [];
+var bootTime = 0;
+const jetHeight = 4;
+var gotJet = false;
+var jetTime = 0;
 
 // ---------------------------------------------------------------------------------------------->
 
@@ -85,27 +99,29 @@ main();
 
 
 
-function genEnemy1(gl) {
+function genEnemy2(gl) {
   var laneNum = Math.floor(Math.random() * 100) % 3;
-  var ret = new cuboid(gl, [lane[laneNum].pos[0], groundY + enemy1Dim[1]/2, lastGenZ[laneNum] - Math.random()*50], enemy1Dim, loadTexture(gl, colorBrightRed, 1));
+  var ret = new cuboid(gl, [lane[laneNum].pos[0], groundY + enemy2Dim[1] / 2, lastGenZ[laneNum] - Math.random() * 50], enemy2Dim, loadTexture(gl, "static/pole.jpg", 0));
   lastGenZ[laneNum] = ret.pos[2] - ret.dim[2];
   return ret;
 }
+
 
 function genBarricade(gl) {
   var laneNum = Math.floor(Math.random() * 100) % 3;
-  var ret = new cuboid(gl, [lane[laneNum].pos[0], 3*playerDim[1]/8, lastGenZ[laneNum] - Math.random()*50], [laneWidth, 3*playerDim[1]/4, 0.5], loadTexture(gl, "static/barricade.jpeg", 0));
+  var ret = new cuboid(gl, [lane[laneNum].pos[0], 3 * playerDim[1] / 8, lastGenZ[laneNum] - Math.random() * 50], [laneWidth, 3 * playerDim[1] / 4, 0.5], loadTexture(gl, "static/barricade.jpeg", 0));
   lastGenZ[laneNum] = ret.pos[2] - ret.dim[2];
   return ret;
 }
 
+
 function genHoleBarricade(gl) {
   var laneNum = Math.floor(Math.random() * 100) % 3;
-  var ret = new cuboid(gl, [lane[laneNum].pos[0], 3*playerDim[1]/4 + playerDim[1]/16, lastGenZ[laneNum] - Math.random()*50], [laneWidth - playerDim[1]/8, playerDim[1]/8, 0.5], loadTexture(gl, "static/barricade.jpeg", 0));
+  var ret = new cuboid(gl, [lane[laneNum].pos[0], 3 * playerDim[1] / 4 + playerDim[1] / 16, lastGenZ[laneNum] - Math.random() * 50], [laneWidth - playerDim[1] / 8, playerDim[1] / 8, 0.5], loadTexture(gl, "static/barricade.jpeg", 0));
 
-  var ret1 = new cuboid(gl, [lane[laneNum].pos[0] - laneWidth/2 + playerDim[1]/8, 3*playerDim[1]/8, ret.pos[2]], [playerDim[1]/8, 3*playerDim[1]/4, 0.5], loadTexture(gl, "static/barricade.jpeg", 0));
+  var ret1 = new cuboid(gl, [lane[laneNum].pos[0] - laneWidth / 2 + playerDim[1] / 8, 3 * playerDim[1] / 8, ret.pos[2]], [playerDim[1] / 8, 3 * playerDim[1] / 4, 0.5], loadTexture(gl, "static/barricade.jpeg", 0));
 
-  var ret2 = new cuboid(gl, [lane[laneNum].pos[0] + laneWidth/2 - playerDim[1]/8, 3*playerDim[1]/8, ret.pos[2]], [playerDim[1]/8, 3*playerDim[1]/4, 0.5], loadTexture(gl, "static/barricade.jpeg", 0));
+  var ret2 = new cuboid(gl, [lane[laneNum].pos[0] + laneWidth / 2 - playerDim[1] / 8, 3 * playerDim[1] / 8, ret.pos[2]], [playerDim[1] / 8, 3 * playerDim[1] / 4, 0.5], loadTexture(gl, "static/barricade.jpeg", 0));
 
 
   lastGenZ[laneNum] = ret.pos[2] - ret.dim[2];
@@ -115,20 +131,32 @@ function genHoleBarricade(gl) {
   };
 }
 
+
 function genBoostBoot(gl) {
   var laneNum = Math.floor(Math.random() * 100) % 3;
-  var ret = new cuboid(gl, [lane[laneNum].pos[0], 1, lastGenZ[laneNum] - Math.random()*50], [1, 1, 1], loadTexture(gl, "static/boot.jpeg", 0));
+  var ret = new cuboid(gl, [lane[laneNum].pos[0], 1, lastGenZ[laneNum] - Math.random() * 50], [1, 1, 1], loadTexture(gl, "static/boot.jpeg", 0));
   bootDraw.push(true);
   lastGenZ[laneNum] = ret.pos[2] - ret.dim[2];
   return ret;
 }
 
+
 function genBoostJet(gl) {
   var laneNum = Math.floor(Math.random() * 100) % 3;
-  var ret = new cuboid(gl, [lane[laneNum].pos[0], 1, lastGenZ[laneNum] - Math.random()*50], [1, 1, 1], loadTexture(gl, "static/jet.jpeg", 0));
+  var ret = new cuboid(gl, [lane[laneNum].pos[0], 1, lastGenZ[laneNum] - Math.random() * 50], [1, 1, 1], loadTexture(gl, "static/jet.jpeg", 0));
   jetDraw.push(true);
   lastGenZ[laneNum] = ret.pos[2] - ret.dim[2];
   return ret;
+}
+
+
+function genCoin(gl) {
+  if (coinCluster.length > coinNumLim)
+    return;
+  var laneNum = Math.floor(Math.random() * 100) % 3;
+  var z = player.pos[2] + sceneZ - Math.random() * 100;
+  coinCluster.push(new cuboid(gl, [lane[laneNum].pos[0], player.pos[1], z], coinDim, loadTexture(gl, colorGold, 1)));
+  coinDraw.push(true);
 }
 
 
@@ -152,14 +180,14 @@ function tickInput() {
   if (spacePressed) {
     if (!isJumping) {
       isJumping = true;
-      player.speedY = Math.sqrt(2*player.accY*jumpHeight);
+      player.speedY = Math.sqrt(2 * player.accY * jumpHeight);
     }
   }
-  else if (downPressed) {
+  if (downPressed) {
     // Duck
-    if (!isDucking) {
+    if (!isDucking && !gotJet) {
       isDucking = true;
-      player.pos[1] -= playerDim[1]/4;
+      player.pos[1] -= playerDim[1] / 4;
       player.scale[1] /= 2.0;
       player.dim[1] /= 2;
     }
@@ -168,7 +196,7 @@ function tickInput() {
   if (!downPressed && isDucking) {
     // Revert duck
     isDucking = false;
-    player.pos[1] += playerDim[1]/4;
+    player.pos[1] += playerDim[1] / 4;
     player.scale[1] *= 2.0;
     player.dim[1] *= 2;
   }
@@ -177,55 +205,85 @@ function tickInput() {
 
 
 function tickElements(gl) {
-  // Player coins collision
+  document.getElementById("score").innerHTML = playerScore;
 
-  // Player enemy1 collision
-  enemy1.forEach(function (e1) {
-    if (detectCollision(player, e1)) {
-      // gameOver = true;
+  // Player coins collision
+  coinCluster.forEach(function (coin, index) {
+    if (detectCollision(player, coin) && coinDraw[index]) {
+      playerScore += 10;
+      coinDraw[index] = false;
     }
   });
+
+  // Player enemy2 collision
+  enemy2.forEach(function (e2, index) {
+    if (detectCollision(player, e2) && policeFlag <= policeLim && isSlowed != index && isSlowed >= 0) {
+      gameOver = true;
+    }
+    else if (detectCollision(player, e2)) {
+      isSlowed = index;
+      policeFlag = 0;
+    }
+    else if (policeFlag > policeLim)
+      isSlowed = -1;
+  });
+
 
   // Player barricade collision
   barricade.forEach(function (b) {
     if (detectCollision(player, b)) {
-      // gameOver = true;
+      gameOver = true;
     }
   });
 
+
   // Player hole barricade collision
   holeBarricade.forEach(function (hb) {
-    if (detectCollision(player, hb.legs[0]) || detectCollision(player, hb.legs[1])) {
-      // gameOver = true;
-    }
-    if (detectCollision(player, hb.top)) {
-      console.log(player.pos, player.dim);
+    if (detectCollision(player, hb.top) || detectCollision(player, hb.legs[0]) || detectCollision(player, hb.legs[1])) {
+      gameOver = true;
     }
   });
+
 
   // Player boot boost collision
   boot.forEach(function (bo, index) {
     if (detectCollision(player, bo) && bootDraw[index]) {
       bootTime = 0;
       bootDraw[index] = false;
-      jumpHeight = 5;
+      jumpHeight = 4;
     }
   });
   bootTime++;
-  if (bootTime == boostTimeLimit && jumpHeight == 5) {
+  if (bootTime == boostTimeLimit && jumpHeight == 4) {
     jumpHeight = 2;
   }
+
 
   // Player jet boost collision
   jet.forEach(function (j, index) {
     if (detectCollision(player, j) && jetDraw[index]) {
       jetDraw[index] = false;
+      jetTime = 0;
+      player.accY = 0;
+      gotJet = true;
     }
   });
+  if (gotJet && player.pos[1] + 0.05 <= jetHeight) {
+    player.pos[1] += 0.05;
+  }
+  if (gotJet) {
+    jetTime++;
+    if (jetTime == boostTimeLimit) {
+      jetTime = 0;
+      gotJet = false;
+      player.accY = 9.81;
+    }
+  }
+
 
   // Random obstacle generation
-  if (enemy1GenFlag % genNum < 100 && enemy1.length < obstacleNumLim) {
-    enemy1.push(genEnemy1(gl));
+  if (enemy2GenFlag % genNum < 100 && enemy2.length < obstacleNumLim) {
+    enemy2.push(genEnemy2(gl));
   }
   if (barricadeFlag % genNum < 100 && barricade.length < obstacleNumLim) {
     barricade.push(genBarricade(gl));
@@ -233,9 +291,10 @@ function tickElements(gl) {
   if (holeBarricadeFlag % genNum < 100 && holeBarricade.length < obstacleNumLim) {
     holeBarricade.push(genHoleBarricade(gl));
   }
-  enemy1GenFlag = (enemy1GenFlag + 1) % genNum;
+  enemy2GenFlag = (enemy2GenFlag + 1) % genNum;
   barricadeFlag = (barricadeFlag + 1) % genNum;
   holeBarricadeFlag = (holeBarricadeFlag + 1) % genNum;
+
 
   // Random boost generation
   if (boostGenFlag % boostGenNum < 100 && boot.length < boostNumLim) {
@@ -245,8 +304,21 @@ function tickElements(gl) {
   boostGenFlag = (boostGenFlag + 1) % boostGenNum;
 
   // Random coin generation
-  
-  
+  if (coinGenFlag % coinGenNum < 100)
+    genCoin(gl, coinNum);
+  coinGenFlag = (coinGenFlag + 1) % coinGenNum;
+
+
+  // Police movement
+  if (policeFlag === 0)
+    police.pos[2] = player.pos[2] + playerDim[2];
+  policeFlag++;
+  policeDraw = (policeFlag <= policeLim)
+
+  police.pos[2] += 0.04 + 1 / (policeFlag * policeLim);
+  police.pos[1] = player.pos[1];
+  police.pos[0] = player.pos[0];
+
 
   // Lane changing logic
   if (movingRight) {
@@ -262,24 +334,32 @@ function tickElements(gl) {
       player.pos[0] -= speedX;
   }
 
+
   // Falling Logic
-  var final = player.speedY - player.accY / 60;
-  var disp = (player.speedY * player.speedY - final * final) / (2 * player.accY);
-  if (player.pos[1] + disp <= playerPos[1]) {
-    isJumping = false;
-  } else {
-    player.pos[1] += disp;
-    player.speedY = final;
+  if (isJumping || !gotJet) {
+    var final = player.speedY - player.accY / 60;
+    var disp = (player.speedY * player.speedY - final * final) / (2 * player.accY);
+    if (player.pos[1] + disp <= playerPos[1]) {
+      isJumping = false;
+      if (!isDucking)
+        player.pos[1] = playerPos[1];
+      player.accY = 9.81;
+    } else {
+      player.pos[1] += disp;
+      player.speedY = final;
+    }
+    if (isDucking) {
+      player.accY += 20;
+    }
   }
 
 
-
   // Objects move backward
-  enemy1.forEach(function (e1) {
-    e1.pos[2] += speedZ;
+  enemy2.forEach(function (e2) {
+    e2.pos[2] += speedZ;
   });
   barricade.forEach(function (b) {
-    b.pos[2] += speedZ; 
+    b.pos[2] += speedZ;
   });
   holeBarricade.forEach(function (hb) {
     hb.top.pos[2] += speedZ;
@@ -291,6 +371,9 @@ function tickElements(gl) {
   });
   jet.forEach(function (j) {
     j.pos[2] += speedZ;
+  });
+  coinCluster.forEach(function (coin) {
+    coin.pos[2] += speedZ;
   });
 
   // Forward Movement Illusion
@@ -305,22 +388,27 @@ function tickElements(gl) {
 
 function initGame(gl) {
   // Initialize game objects here
-  player = new cuboid(gl, Object.assign({}, playerPos), Object.assign({}, playerDim), loadTexture(gl, colorRed, 1));
+  player = new cuboid(gl, Object.assign({}, playerPos), Object.assign({}, playerDim), loadTexture(gl, "static/player.jpeg", 0));
+
+  police = new cuboid(gl, [playerPos[0], playerPos[1], playerPos[2] + playerDim[2]], Object.assign({}, playerDim), loadTexture(gl, "static/police.jpg", 0));
 
   var trackTexture = loadTexture(gl, "static/track.jpg", 0);
   lane.push(new cuboid(gl, [centreX - laneWidth, groundY - 1, sceneZ], [laneWidth, 2, 40], trackTexture));
   lane.push(new cuboid(gl, [centreX, groundY - 1, sceneZ], [laneWidth, 2, 40], trackTexture));
   lane.push(new cuboid(gl, [centreX + laneWidth, groundY - 1, sceneZ], [laneWidth, 2, 40], trackTexture));
-  
+
   var wallTexture = loadTexture(gl, "static/wall.png", 0);
-  wall.push(new cuboid(gl, [centreX + 2.1*laneWidth, 2, sceneZ], [4, 4, 40], wallTexture));
-  wall.push(new cuboid(gl, [centreX - 2.1*laneWidth, 2, sceneZ], [4, 4, 40], wallTexture));
+  wall.push(new cuboid(gl, [centreX + 2.1 * laneWidth, 2, sceneZ], [4, 4, 40], wallTexture));
+  wall.push(new cuboid(gl, [centreX - 2.1 * laneWidth, 2, sceneZ], [4, 4, 40], wallTexture));
 }
 
 
 function drawGame(gl, viewProjectionMatrix, programInfo, programInfoFlash, deltaTime) {
   // Render objects here
   player.draw(gl, viewProjectionMatrix, programInfo, deltaTime);
+
+  if (policeDraw)
+    police.draw(gl, viewProjectionMatrix, programInfo, deltaTime);
 
   lane.forEach(function (l) {
     l.draw(gl, viewProjectionMatrix, programInfo, deltaTime);
@@ -336,8 +424,8 @@ function drawGame(gl, viewProjectionMatrix, programInfo, programInfoFlash, delta
   });
   flash = (flash + 1) % 50;
 
-  enemy1.forEach(function (e1) {
-    e1.draw(gl, viewProjectionMatrix, programInfo, deltaTime);
+  enemy2.forEach(function (e2) {
+    e2.draw(gl, viewProjectionMatrix, programInfo, deltaTime);
   })
 
   barricade.forEach(function (b) {
@@ -359,13 +447,18 @@ function drawGame(gl, viewProjectionMatrix, programInfo, programInfoFlash, delta
     if (jetDraw[index])
       j.draw(gl, viewProjectionMatrix, programInfo, deltaTime);
   })
+
+  coinCluster.forEach(function (coin, index) {
+    if (coinDraw[index])
+      coin.draw(gl, viewProjectionMatrix, programInfo, deltaTime);
+  });
 }
 
 
 function detectCollision(a, b) {
-  return 2*Math.abs(a.pos[0] - b.pos[0]) <= (a.dim[0] + b.dim[0]) &&
-         2*Math.abs(a.pos[1] - b.pos[1]) <= (a.dim[1] + b.dim[1]) &&
-         2*Math.abs(a.pos[2] - b.pos[2]) <= (a.dim[2] + b.dim[2]);
+  return 2 * Math.abs(a.pos[0] - b.pos[0]) <= (a.dim[0] + b.dim[0]) &&
+    2 * Math.abs(a.pos[1] - b.pos[1]) <= (a.dim[1] + b.dim[1]) &&
+    2 * Math.abs(a.pos[2] - b.pos[2]) <= (a.dim[2] + b.dim[2]);
 }
 
 
@@ -377,13 +470,13 @@ function detectCollision(a, b) {
 function loadTexture(gl, urlOrColor, typeFlag) {
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  
+
   var color = [0, 0, 255, 255];
   if (typeFlag) {
     urlOrColor.push(255);
     color = urlOrColor;
   }
-  
+
   // Because images have to be download over the internet
   // they might take a moment until they are ready.
   // Until then put a single pixel in the texture so we can
@@ -397,23 +490,23 @@ function loadTexture(gl, urlOrColor, typeFlag) {
   const srcFormat = gl.RGBA;
   const srcType = gl.UNSIGNED_BYTE;
   const pixel = new Uint8Array(color);  // opaque blue
-  
+
   gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
     width, height, border, srcFormat, srcType,
     pixel);
-  
+
   // if (typeFlag)
   //   return texture;
 
   const image = new Image();
-  image.onload = function() {
+  image.onload = function () {
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
       srcFormat, srcType, image);
-      
-      // WebGL1 has different requirements for power of 2 images
-      // vs non power of 2 images so check if the image is a
-      // power of 2 in both dimensions.
+
+    // WebGL1 has different requirements for power of 2 images
+    // vs non power of 2 images so check if the image is a
+    // power of 2 in both dimensions.
     if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
       // Yes, it's a power of 2. Generate mips.
       gl.generateMipmap(gl.TEXTURE_2D);
@@ -426,7 +519,7 @@ function loadTexture(gl, urlOrColor, typeFlag) {
     }
   };
   image.src = urlOrColor;
-  
+
   return texture;
 }
 
@@ -452,7 +545,7 @@ function main() {
     else if (event.keyCode == 37) {
       leftPressed = true;
     }
-    
+
     if (event.keyCode == 32) {
       spacePressed = true;
     }
@@ -555,7 +648,7 @@ function main() {
       gl_FragColor = color;
     }
   `;
-  
+
   const fsSourceFlashAndGrayscale = `
     // varying lowp vec4 vColor;
 
@@ -585,13 +678,13 @@ function main() {
     attribLocations: {
       vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
       // vertexColor: gl.getAttribLocation(shaderProgram, 'aVertexColor'),
-      
+
       textureCoord: gl.getAttribLocation(shaderProgram, 'aTextureCoord'),
     },
     uniformLocations: {
       projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
       modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
-      
+
       uSampler: gl.getUniformLocation(shaderProgram, 'uSampler'),
     },
   };
@@ -603,13 +696,13 @@ function main() {
     attribLocations: {
       vertexPosition: gl.getAttribLocation(shaderProgramGrayScale, 'aVertexPosition'),
       // vertexColor: gl.getAttribLocation(shaderProgramGrayScale, 'aVertexColor'),
-      
+
       textureCoord: gl.getAttribLocation(shaderProgramGrayScale, 'aTextureCoord'),
     },
     uniformLocations: {
       projectionMatrix: gl.getUniformLocation(shaderProgramGrayScale, 'uProjectionMatrix'),
       modelViewMatrix: gl.getUniformLocation(shaderProgramGrayScale, 'uModelViewMatrix'),
-      
+
       uSampler: gl.getUniformLocation(shaderProgramGrayScale, 'uSampler'),
     },
   };
@@ -621,13 +714,13 @@ function main() {
     attribLocations: {
       vertexPosition: gl.getAttribLocation(shaderProgramFlash, 'aVertexPosition'),
       // vertexColor: gl.getAttribLocation(shaderProgramFlash, 'aVertexColor'),
-      
+
       textureCoord: gl.getAttribLocation(shaderProgramFlash, 'aTextureCoord'),
     },
     uniformLocations: {
       projectionMatrix: gl.getUniformLocation(shaderProgramFlash, 'uProjectionMatrix'),
       modelViewMatrix: gl.getUniformLocation(shaderProgramFlash, 'uModelViewMatrix'),
-      
+
       uSampler: gl.getUniformLocation(shaderProgramFlash, 'uSampler'),
     },
   };
@@ -639,13 +732,13 @@ function main() {
     attribLocations: {
       vertexPosition: gl.getAttribLocation(shaderProgramFlashAndGrayscale, 'aVertexPosition'),
       // vertexColor: gl.getAttribLocation(shaderProgramFlashAndGrayscale, 'aVertexColor'),
-      
+
       textureCoord: gl.getAttribLocation(shaderProgramFlashAndGrayscale, 'aTextureCoord'),
     },
     uniformLocations: {
       projectionMatrix: gl.getUniformLocation(shaderProgramFlashAndGrayscale, 'uProjectionMatrix'),
       modelViewMatrix: gl.getUniformLocation(shaderProgramFlashAndGrayscale, 'uModelViewMatrix'),
-      
+
       uSampler: gl.getUniformLocation(shaderProgramFlashAndGrayscale, 'uSampler'),
     },
   };
@@ -666,7 +759,7 @@ function main() {
     tickElements(gl);
 
     if (gameOver) {
-      alert("Game Over");
+      alert("Game Over\nYour Score is " + playerScore);
       return;
     }
 
@@ -686,7 +779,7 @@ function main() {
 function drawScene(gl, programInfo, deltaTime) {
   var colorBack = colorBackground;
   if (grayscale) {
-    var temp = colorBack[0]*0.299 + colorBack[1]*0.587 + colorBack[2]*0.114;
+    var temp = colorBack[0] * 0.299 + colorBack[1] * 0.587 + colorBack[2] * 0.114;
     colorBack = [temp, temp, temp];
   }
 
@@ -723,7 +816,7 @@ function drawScene(gl, programInfo, deltaTime) {
   // Set the drawing position to the "identity" point, which is
   // the center of the scene.
   var cameraMatrix = mat4.create();
-  
+
   var eye = [centreX, playerPos[1], player.pos[2]];
   var target = [centreX, 7 + playerPos[1], 10 + player.pos[2]];
   var up = [0, 1, 0];
@@ -738,7 +831,7 @@ function drawScene(gl, programInfo, deltaTime) {
     cameraMatrix,
     target
   );
-  
+
   var cameraPosition = [
     cameraMatrix[12],
     cameraMatrix[13],
